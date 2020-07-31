@@ -1,17 +1,24 @@
 import cv2
 import numpy as np
 import csv
+from math import sqrt
+
 ##print(cv2.__version__)
 print("numpy and opencv successfuly imported")
 
 # Read in AVI file:
 # Create a VideoCapture object via passing in filename. 
 # https://docs.opencv.org/2.4/modules/highgui/doc/reading_and_writing_images_and_video.html#videocapture-videocapture
-filename = "robot_moving_5_crop.avi"
-cap = cv2.VideoCapture("/Users/aliristang/Desktop/robot_moving_5_crop.avi") #try home if Users doesn't work
+
+#filename = "robot_moving_3_crop"
+filename = "robot_moving_4_crop"
+#filename = "robot_moving_5_crop"
+
+cap = cv2.VideoCapture("/Users/aliristang/Desktop/robot_moving_4_crop.avi") #try home if Users doesn't work
 
 #init variables 
 frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+px_to_mm_factor = round( 5 / 24.87, 6)
 
 # Check if camera opened successfully
 if (cap.isOpened()== False): 
@@ -33,8 +40,8 @@ frame0Neg = cv2.bitwise_not(frame0)
 clone_frame0 = frame0.copy() # Copy the frame
 frame_no = cap.get(cv2.CAP_PROP_POS_FRAMES)
 #cv2.putText(frame0,'Frame: %d' % frame_no,(10,50), font,1,(255,255,255),2,cv2.LINE_AA)
-#cv2.imshow('frame', frame0) no need to show frame
-cv2.waitKey(2000) #in milliseconds
+cv2.imshow('frame0', frame0) 
+cv2.waitKey(0) #in milliseconds
 
 ##### SIMPLE BLOB DETECTOR CODE
 # # Setup SimpleBlobDetector parameters.
@@ -85,8 +92,6 @@ cv2.imshow('mask',mask)
 
 cv2.waitKey(0)
 
-
-
 ####################### DETECTING FIRST FRAME DONE, PROCESS WHOLE VIDEO BELOW
 
 # init final output arrays r
@@ -131,6 +136,8 @@ while(cap.isOpened()):
         blob = max(contours, key=lambda el: cv2.contourArea(el))
          
         M = cv2.moments(blob)
+        center = (int(M["m10"] / M["m00"]), int(M["m01"] / M["m00"]))
+
         center_x = (int(M["m10"] / M["m00"]))
         center_y = (int(M["m01"] / M["m00"]))
 
@@ -141,8 +148,8 @@ while(cap.isOpened()):
         xpos.append(center_x)
         ypos.append(center_y)
 
-        cv2.putText(frame_clone,'Frame: %d' % k,(10,50), font,1,(255,255,255),2,cv2.LINE_AA)
-        cv2.putText(frame_clone,'Time: %.2f' % time,(10,100), font,1,(255,255,255),2,cv2.LINE_AA)
+        cv2.putText(frame_clone,'Frame: %d' % k,(10,30), font,0.5,(255,255,255),2,cv2.LINE_AA)
+        cv2.putText(frame_clone,'Time: %.2f' % time,(10,45), font,0.5,(255,255,255),2,cv2.LINE_AA)
         cv2.circle(frame_clone, center, 2, (0,0,255), -1)
 
     except (ValueError, ZeroDivisionError):
@@ -167,25 +174,30 @@ while(cap.isOpened()):
 
 print("Done Video Processing.")
 
-filename = 'smbr_opencv_result.csv'
-print("x0): " + xpos[0])
-print("y0): " + ypos[0])
-
-with open(filename, "w") as csvfile:
+csvfilename = 'smbr_opencv_result.csv' 
+with open(csvfilename, "w") as csvfile:
     writer = csv.writer(csvfile)
-    writer.writerow(test_arr)
-    writer.writerows([["Date",now.strftime("%Y/%m/%d")]])
-    writer.writerows([["Sample",filename]])
-    writer.writerows([["Frame Rate",frame_rate]])
-    writer.writerows([["Average Velocity", avg_vel_pix, "pixels/s"]])
+    #writer.writerows([["Date",now.strftime("%Y/%m/%d")]])
+    writer.writerows([["Sample: ",filename]])
+    writer.writerows([["Frame Rate: ",frame_rate]])
+    writer.writerows([["Total Frames: ",frame_count]])
+    writer.writerows([["Pixel/MM Scale Factor: ", px_to_mm_factor]])
+    #writer.writerows([["Average Velocity", avg_vel_pix, "pixels/s"]])
     #writer.writerows([["Average Velocity", avg_vel_mm, "mm/s"]])
-    writer.writerows([["Camera Matrix",K]])
-    writer.writerows([["Frame_No", "Time", "px","py", "mx", "my", "mz"]])
-    print("Done Writing to CSV.")
+    #writer.writerows([["Camera Matrix",K]])
+    writer.writerows([["Frame_No", "Time", "X_Position","Y_Position", "Speed [px/s]", "Speed [mm/s]"]])
 
-        
+    for i in range(frame_count - 1):
+        t = time_stamp[i]
+        px = xpos[i]
+        py = ypos[i]
+        xDiffSq = (xpos[i+1] - xpos[i]) ** 2
+        yDiffSq = (ypos[i+1] - ypos[i]) ** 2
+        speed_px_per_s = round((sqrt(xDiffSq + yDiffSq))/0.1, 3)
+        speed_mm_per_s = round(speed_px_per_s * px_to_mm_factor, 3)
 
-
-
-
+        writer.writerows([[i, t, px, py, speed_px_per_s, speed_mm_per_s]])
     
+    csvfile.close()
+    
+    print("Done Writing to CSV.")
